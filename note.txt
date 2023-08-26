@@ -1,0 +1,195 @@
+1.สร้างโปรเจค Node js  ด้วย node-express generator
+-npx express-generator
+
+2.ตืดตั้ง  Dependencies nodemon เพื่อให้ hot re-load หลังแก้ไขโค้ด
+- npm i nodemon
+-เพิ่ม แก้ไข script ใน package.json
+	"scripts": {
+    "start": "nodemon ./bin/www"
+  }
+
+3.ตืดตั้ง  Dependencies cors, mysql2, jsonwebtoken, dotenv, bcrypt
+-เรียกใช้ cors ผ่าน middleware แก้ไขการเรียก api cross domain
+
+4.สร้าง  folder configuration สำหรับสร้างไฟล์ connection string ด้วย mysql2
+-configuratiin>db_connection.js
+
+const mysql = require('mysql2');
+
+// create the connection to database
+const conn = mysql.createConnection({
+  host: 'localhost',
+  user: 'root',
+  password: '',
+  database: 'users_db'
+});
+
+conn.connect((err) => {
+    if (err) throw err;
+    console.log('Connected to the MySql');
+});
+
+module.exports = conn;
+
+5.สร้าง Route /register
+-กำหนด path /register และเรียกใช้ controller register
+
+6.สร้าง Folder controllers>register.js
+-สร้าง controller register
+-เรียกใช้ connection string
+-ใช้ bcrypt ในการ hash password
+
+const conn = require('../configuration/db_conention')
+const bcrypt = require('bcrypt');
+const saltRounds = 10;
+
+exports.register = (req, res, next) => {
+  let email = req.body.email;
+  let password = req.body.password;
+  let fname = req.body.fname;
+  let lname = req.body.lname;
+  let phone = req.body.phone;
+
+  //Hash password with Bcrypt
+  bcrypt.hash(password, saltRounds, function(err, hash) {
+    
+    //Protect SQL injection
+    conn.execute('INSERT INTO users (email, password, fname, lname, phone) VALUES(?, ?, ?, ?, ?)', 
+      [email, hash, fname, lname ,phone], 
+      (err, results, fields) => {
+        if(err) {
+          res.json({
+            status : "Error",
+            message: err
+          })
+          return
+        }
+        res.json({
+          status: "success",
+          data: results
+        })
+      }
+    )
+  });      
+}
+
+7.สร้าง route login และสร้าง controller login
+-ใช้  bcrypt compare ระหว่าง  password ใน body  กับใน database เหมือนกันหรือไม่
+-ถ้าเหมือน เรียกใช้ jsonwebtoken ในการ generate token 
+
+var jwt = require('jsonwebtoken');
+// const secret = 'secrete-key-api-2023';
+const conn = require('../configuration/db_conention')
+const bcrypt = require('bcrypt');
+// const saltRounds = 10;
+
+exports.login = (req, res, next) => {
+    let email = req.body.email;
+    let password = req.body.password;
+
+     //Protect SQL injection
+     conn.execute('SELECT * FROM users WHERE email = ?', 
+     [email], 
+     (err, users, fields) => {
+       if(err) {
+         res.json({
+           status : "Error",
+           message: err
+         })
+         return
+       }
+       if(users.length == 0) {
+         res.json({
+           status : "Error",
+           message: "No user found."
+         })
+         return
+       }
+
+        // Test
+        /*
+        bcrypt.compare(password, users[0].password, function(err, isLogin) {
+            console.log(users)
+            console.log(isLogin)
+            if(isLogin){
+                res.json({
+                    status: "Success",
+                    message: "login success"
+                  })
+            } else {
+                res.json({
+                    status: "Error",
+                    message: "login failed"
+                  })
+            }
+        });
+        */
+       
+        //Promise 
+        bcrypt.compare(req.body.password, users[0].password).then(function(isLogin) {
+                // console.log(isLogin)
+                console.log([0]);
+            if(isLogin){
+              var token = jwt.sign({ email: users[0].email }, process.env.SECRET, { expiresIn: '1h' }, { algorithms: ['HS256'] });
+                res.json({
+                    status: "Success",
+                    message: "login success",
+                    token: token
+                  })
+            } else {
+                res.json({
+                    status: "Error",
+                    message: "login failed"
+                  })
+            }
+        })
+        .catch(err => res.json(err))
+     }
+   )
+}
+
+8.สร้าง route auth และ controller auth
+-เรียกใช้ jwt ในการ verrify
+var jwt = require('jsonwebtoken');
+
+exports.auth = (req, res, next) => {
+    const token = req.headers.authorization.split(' ')[1];
+
+    try {
+        var decoded = jwt.verify(token, process.env.SECRET, (err, result) => {
+            if(err) {
+                res.json({
+                    status: "Error",
+                    err
+                })
+            } else {
+                res.json({
+                    status: "Successful",
+                    result
+                })
+            }
+        });
+    } 
+    catch (err) {
+        res.json({
+            status: "Error",
+            message: err
+        })
+    }  
+   
+   
+    /*
+    try {
+            res.json({
+                status: "Success",
+                data: decoded
+            })
+        } 
+    catch (err) {
+        res.json({
+            status: "Error",
+            message: err
+        })
+    }  
+    */
+}
