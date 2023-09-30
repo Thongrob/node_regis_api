@@ -14,7 +14,7 @@ exports.getInfo = (req, res, next) => {
                     err
                 })
             } else {
-                conn.execute('SELECT * FROM site_info WHERE trash = 0 AND  site_code = ?', 
+                conn.execute('SELECT `site_code`, `lat`, `long` FROM site_info WHERE trash = 0 AND  site_code = ?', 
                     [site_code], 
                     (err, info, fields) => {
                         if(err) {
